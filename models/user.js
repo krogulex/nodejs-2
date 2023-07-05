@@ -6,11 +6,10 @@ const user = new Schema({
   password: {
     type: String,
     required: [true, 'Password is required'],
-    minlength: [8, 'Password must have at least 8 characters'],
     validate: {
         validator: function (value) {
           // Password must contain at least one uppercase letter, one lowercase letter, and one digit
-          const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+          const passwordRegex = /^(?=.*?[A-Z])(?=.*?[a-z])(?=.*?[0-9])(?=.*?[#?!@$%^&*-]).{8,}$/;
           return passwordRegex.test(value);
         },
         message: 'Password must contain at least one uppercase letter, one lowercase letter, and one digit'
@@ -24,7 +23,7 @@ const user = new Schema({
     maxlength: [170, "Email can have at most 170 characters"],
     validate: {
         validator: function (value) {
-          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          const emailRegex = /^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$/;
           return emailRegex.test(value);
         },
         message: "Email must be a valid email address"
@@ -39,6 +38,7 @@ const user = new Schema({
     type: String,
     default: null,
   },
+  avatarURL: String
 });
 
  user.methods.setPassword = function (password) {

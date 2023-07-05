@@ -1,5 +1,10 @@
 const User = require("../models/user");
 const jwt = require("jsonwebtoken");
+const gravatar = require("gravatar");
+const jimp = require("jimp");
+const path = require("path");
+const multer = require("multer")
+
 
 require("dotenv").config();
 const secret = process.env.SECRET;
@@ -56,8 +61,22 @@ const userRegister = async (req, res, next) => {
         message: "User already exist!",
       });
     }
-    const newUser = await new User({ email });
+    const avatarURL = gravatar.url(email, { s: "200", r: "pg", d: "mm" });
+    const newUser = new User({ email, avatarURL });
 
+
+// add second validation becouse password validation is not working in user schema
+/*     const isPasswordValid = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(password);
+    if (!isPasswordValid) {
+      res.json({
+        status: "error",
+        code: 400,
+        data: "Bad Request",
+        message: "Password must contain at least one uppercase letter, one lowercase letter, and one digit",
+      });
+      return; // Return early to prevent further execution
+    }
+ */
     newUser.setPassword(password);
 
     await newUser.save();
@@ -143,10 +162,38 @@ const userSubscription = async (req, res, next) => {
   }
 };
 
+const userAvatar = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization.slice(7);
+    const user = await User.findOne({ token });
+
+      const { file } = req;
+      console.log(file)
+
+      const image = await jimp.read(file.path);
+      await image.cover(250, 250).write(`./public/avatars/${file.filename}`);
+      const avatarURL = `/avatars/${file.filename}`;
+
+      user.avatarURL = avatarURL;
+      await user.save();
+
+      res.json({
+        status: "ok",
+        code: 200,
+        data: {
+          avatarURL: avatarURL,
+        },
+      });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   userLogin,
   userRegister,
   userLogout,
   userCurrent,
   userSubscription,
+  userAvatar
 };
