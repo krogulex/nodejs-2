@@ -3,11 +3,32 @@ const jwt = require("jsonwebtoken");
 const gravatar = require("gravatar");
 const jimp = require("jimp");
 const path = require("path");
-const multer = require("multer")
-
+const multer = require("multer");
+const { v4: uuidv4 } = require("uuid");
+const sgMail = require("@sendgrid/mail");
 
 require("dotenv").config();
 const secret = process.env.SECRET;
+
+const sendVerificationEmail = (email, verificationToken) => {
+  const sgMail = require("@sendgrid/mail");
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  const msg = {
+    to: email, // Change to your recipient
+    from: "krogul.skim.mk@gmail.com", // Change to your verified sender
+    subject: "Verification email",
+    text: "and easy to do anywhere, even with Node.js",
+    html: `To verify in our database please click this link <a href="http://localhost:3000/api/users/verify/${verificationToken}">http://localhost:3000/api/users/verify/${verificationToken}</a>`,
+  };
+  sgMail
+    .send(msg)
+    .then(() => {
+      console.log(`Email sent to mail: ${email}`);
+    })
+    .catch((error) => {
+      console.error(error);
+    });
+};
 
 const userLogin = async (req, res, next) => {
   try {
@@ -20,6 +41,15 @@ const userLogin = async (req, res, next) => {
         code: 400,
         data: "Bad request",
         message: "Incorrect login/password",
+      });
+    }
+
+    if (!user.verify) {
+      return res.json({
+        status: "error",
+        code: 400,
+        data: "Bad request",
+        message: "User not verified!",
       });
     }
 
@@ -62,11 +92,12 @@ const userRegister = async (req, res, next) => {
       });
     }
     const avatarURL = gravatar.url(email, { s: "200", r: "pg", d: "mm" });
-    const newUser = new User({ email, avatarURL });
 
+    const verificationToken = uuidv4();
+    const newUser = new User({ email, avatarURL, verificationToken });
 
-// add second validation becouse password validation is not working in user schema
-/*     const isPasswordValid = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(password);
+    // add second validation becouse password validation is not working in user schema
+    /*     const isPasswordValid = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/.test(password);
     if (!isPasswordValid) {
       res.json({
         status: "error",
@@ -80,6 +111,10 @@ const userRegister = async (req, res, next) => {
     newUser.setPassword(password);
 
     await newUser.save();
+
+    // verification email
+
+    sendVerificationEmail(email, verificationToken);
 
     res.json({
       status: "success",
@@ -167,23 +202,87 @@ const userAvatar = async (req, res, next) => {
     const token = req.headers.authorization.slice(7);
     const user = await User.findOne({ token });
 
-      const { file } = req;
-      console.log(file)
+    const { file } = req;
+    console.log(file);
 
-      const image = await jimp.read(file.path);
-      await image.cover(250, 250).write(`./public/avatars/${file.filename}`);
-      const avatarURL = `/avatars/${file.filename}`;
+    const image = await jimp.read(file.path);
+    await image.cover(250, 250).write(`./public/avatars/${file.filename}`);
+    const avatarURL = `/avatars/${file.filename}`;
 
-      user.avatarURL = avatarURL;
-      await user.save();
+    user.avatarURL = avatarURL;
+    await user.save();
 
-      res.json({
-        status: "ok",
-        code: 200,
-        data: {
-          avatarURL: avatarURL,
+    res.json({
+      status: "ok",
+      code: 200,
+      data: {
+        avatarURL: avatarURL,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const userVerification = async (req, res, next) => {
+  try {
+    const verificationToken = req.params.verificationToken;
+    const user = await User.findOne({ verificationToken });
+
+    if (!user) {
+      return res.json({
+        status: "Not Found",
+        code: 404,
+        ResponseBody: {
+          message: "User not found",
         },
       });
+    }
+
+    user.verificationToken = "null";
+    user.verify = true;
+    await user.save();
+
+    res.json({
+      status: "ok",
+      code: 200,
+      ResponseBody: {
+        message: "Verification successful",
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resendVerificationEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Missing required field email" });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.verify) {
+      return res
+        .status(400)
+        .json({ message: "Verification has already been passed" });
+    }
+
+    const newVerificationToken = uuidv4();
+
+    user.verificationToken = newVerificationToken;
+    await user.save();
+
+    sendVerificationEmail(email, newVerificationToken);
+
+    res.status(200).json({ message: "Verification email sent" });
   } catch (error) {
     next(error);
   }
@@ -195,5 +294,7 @@ module.exports = {
   userLogout,
   userCurrent,
   userSubscription,
-  userAvatar
+  userAvatar,
+  userVerification,
+  resendVerificationEmail,
 };

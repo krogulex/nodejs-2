@@ -24,7 +24,9 @@ const {
   userLogout,
   userCurrent,
   userSubscription,
-  userAvatar
+  userAvatar,
+  userVerification,
+  resendVerificationEmail
 } = require("../../controller/usersCtrl");
 
 router.post("/login", userLogin);
@@ -38,5 +40,9 @@ router.get("/current", auth, userCurrent);
 router.patch("/", auth, userSubscription);
 
 router.patch("/avatars", auth, upload.single("avatar"), userAvatar);
+
+router.get("/verify/:verificationToken", userVerification);
+
+router.post("/verify", resendVerificationEmail)
 
 module.exports = router;
